@@ -1,0 +1,159 @@
+version: '3.9'
+
+services:
+  user-db:
+    image: postgres:15
+    container_name: user-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: users
+    ports:
+      - "5433:5432"
+    volumes:
+      - user_data:/var/lib/postgresql/data
+
+  order-db:
+    image: postgres:15
+    container_name: order-db
+    environment:
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: orders
+    ports:
+      - "5434:5432"
+    volumes:
+      - order_data:/var/lib/postgresql/data
+
+  shared-db:
+    image: postgres:15
+    container_name: shared-db
+    environment:
+      POSTGRES_USER: shared
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: shared
+    ports:
+      - "5435:5432"
+    volumes:
+      - shared_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  # Database per Service
+  user-service:
+    build: ./database_per_service/user_service
+    ports:
+      - "8001:8000"
+    depends_on:
+      - user-db
+
+  order-service:
+    build: ./database_per_service/order_service
+    ports:
+      - "8002:8000"
+    depends_on:
+      - order-db
+
+  # Shared Database
+  shared-service:
+    build: ./shared_db
+    ports:
+      - "8003:8000"
+    depends_on:
+      - shared-db
+
+  # API Composition
+  api-composition:
+    build: ./api_composition
+    ports:
+      - "8004:8000"
+    depends_on:
+      - user-service
+      - order-service
+
+  # Saga Pattern
+  saga-order:
+    build: ./saga_pattern/order_service
+    ports:
+      - "8005:8000"
+    depends_on:
+      - rabbitmq
+
+  saga-payment:
+    build: ./saga_pattern/payment_service
+    ports:
+      - "8006:8000"
+    depends_on:
+      - rabbitmq
+
+  saga-orchestrator:
+    build: ./saga_pattern/orchestrator
+    ports:
+      - "8007:8000"
+    depends_on:
+      - rabbitmq
+
+  # CQRS
+  cqrs-command:
+    build: ./cqrs/command_service
+    ports:
+      - "8008:8000"
+    depends_on:
+      - redis
+
+  cqrs-query:
+    build: ./cqrs/query_service
+    ports:
+      - "8009:8000"
+    depends_on:
+      - redis
+
+  # Event Sourcing
+  event-store:
+    build: ./event_sourcing/event_store
+    ports:
+      - "8010:8000"
+    depends_on:
+      - redis
+
+  event-read-model:
+    build: ./event_sourcing/read_model
+    ports:
+      - "8011:8000"
+    depends_on:
+      - redis
+
+  # Sharding
+  shard1-service:
+    build: ./sharding/shard1_service
+    ports:
+      - "8012:8000"
+
+  shard2-service:
+    build: ./sharding/shard2_service
+    ports:
+      - "8013:8000"
+
+  sharding-router:
+    build: ./sharding/router
+    ports:
+      - "8014:8000"
+    depends_on:
+      - shard1-service
+      - shard2-service
+
+volumes:
+  user_data:
+  order_data:
+  shared_data:
